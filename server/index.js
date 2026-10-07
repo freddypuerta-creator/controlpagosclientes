@@ -62,7 +62,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-app.post('/api/payments', upload.single('receipt'), (req, res) => {
+app.post('/api/payments', upload.single('receipt'), async (req, res) => {
   try {
     const {
       client_code,
@@ -84,7 +84,7 @@ app.post('/api/payments', upload.single('receipt'), (req, res) => {
     const tracking_code = generateTrackingCode();
     const receipt_url = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const newPayment = db.addPayment({
+    const newPayment = await db.addPayment({
       tracking_code,
       client_code: client_code.trim().toUpperCase(),
       client_name: client_name.trim(),
@@ -112,10 +112,10 @@ app.post('/api/payments', upload.single('receipt'), (req, res) => {
   }
 });
 
-app.get('/api/payments/status/:query', (req, res) => {
+app.get('/api/payments/status/:query', async (req, res) => {
   try {
     const query = req.params.query.trim();
-    const payments = db.getPayments({ search: query });
+    const payments = await db.getPayments({ search: query });
     res.json({ success: true, count: payments.length, payments });
   } catch (error) {
     console.error('Error al consultar estatus:', error);
@@ -123,10 +123,10 @@ app.get('/api/payments/status/:query', (req, res) => {
   }
 });
 
-app.get('/api/admin/payments', (req, res) => {
+app.get('/api/admin/payments', async (req, res) => {
   try {
     const { status, search, startDate, endDate, currency } = req.query;
-    const payments = db.getPayments({ status, search, startDate, endDate, currency });
+    const payments = await db.getPayments({ status, search, startDate, endDate, currency });
     res.json({ success: true, count: payments.length, payments });
   } catch (error) {
     console.error('Error al obtener pagos admin:', error);
@@ -134,7 +134,7 @@ app.get('/api/admin/payments', (req, res) => {
   }
 });
 
-app.patch('/api/admin/payments/:id/status', (req, res) => {
+app.patch('/api/admin/payments/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status, admin_notes } = req.body;
@@ -143,7 +143,7 @@ app.patch('/api/admin/payments/:id/status', (req, res) => {
       return res.status(400).json({ error: 'Estatus inválido.' });
     }
 
-    const updatedPayment = db.updatePaymentStatus(id, status, admin_notes);
+    const updatedPayment = await db.updatePaymentStatus(id, status, admin_notes);
     if (!updatedPayment) {
       return res.status(404).json({ error: 'Pago no encontrado.' });
     }
@@ -159,9 +159,9 @@ app.patch('/api/admin/payments/:id/status', (req, res) => {
   }
 });
 
-app.get('/api/admin/stats', (req, res) => {
+app.get('/api/admin/stats', async (req, res) => {
   try {
-    const stats = db.getStats();
+    const stats = await db.getStats();
     res.json({ success: true, stats });
   } catch (error) {
     console.error('Error al obtener estadísticas:', error);
@@ -169,10 +169,10 @@ app.get('/api/admin/stats', (req, res) => {
   }
 });
 
-app.get('/api/admin/export', (req, res) => {
+app.get('/api/admin/export', async (req, res) => {
   try {
     const { status, search, currency } = req.query;
-    const payments = db.getPayments({ status, search, currency });
+    const payments = await db.getPayments({ status, search, currency });
 
     const headers = ['Codigo Seguimiento', 'Codigo Cliente', 'Cliente', 'Concepto', 'Monto', 'Moneda', 'Metodo Pago', 'Referencia', 'Fecha Pago', 'Estado', 'Notas Admin'];
     let csv = headers.join(',') + '\n';
@@ -203,9 +203,9 @@ app.get('/api/admin/export', (req, res) => {
   }
 });
 
-app.get('/api/clients', (req, res) => {
+app.get('/api/clients', async (req, res) => {
   try {
-    const clients = db.getClients();
+    const clients = await db.getClients();
     res.json({ success: true, clients });
   } catch (error) {
     console.error('Error al obtener clientes:', error);
@@ -213,23 +213,23 @@ app.get('/api/clients', (req, res) => {
   }
 });
 
-app.post('/api/clients', (req, res) => {
+app.post('/api/clients', async (req, res) => {
   try {
     const { client_code, name, email, phone } = req.body;
     if (!client_code || !name) {
       return res.status(400).json({ error: 'Código de cliente y Nombre son obligatorios.' });
     }
 
-    const newClient = db.addClient({ client_code, name, email, phone });
+    const newClient = await db.addClient({ client_code, name, email, phone });
     res.status(201).json({ success: true, message: 'Cliente registrado exitosamente.', client: newClient });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Error al guardar el cliente.' });
   }
 });
 
-app.get('/api/notifications', (req, res) => {
+app.get('/api/notifications', async (req, res) => {
   try {
-    const notifications = db.getNotifications();
+    const notifications = await db.getNotifications();
     res.json({ success: true, notifications });
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener notificaciones.' });

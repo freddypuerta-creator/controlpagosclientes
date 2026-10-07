@@ -11,12 +11,13 @@
     "start": "node server/index.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
-    "multer": "^1.4.5-lts.1",
-    "lucide-react": "^0.395.0",
-    "recharts": "^2.12.7",
     "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "lucide-react": "^0.395.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.23.1",
+    "recharts": "^2.12.7",
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {

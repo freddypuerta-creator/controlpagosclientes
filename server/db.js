@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pkg from 'pg';
+const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8,11 +10,77 @@ const __dirname = path.dirname(__filename);
 const dataDir = path.join(__dirname, 'data');
 const dbFilePath = path.join(dataDir, 'database.json');
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// Check if PostgreSQL DATABASE_URL is set in environment
+const DATABASE_URL = process.env.DATABASE_URL;
+
+let pgPool = null;
+
+if (DATABASE_URL) {
+  console.log('⚡ Conectando a Base de Datos PostgreSQL Externa (Nube)...');
+  pgPool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false } // Required for cloud providers like Supabase, Render, Neon
+  });
+
+  // Auto-create PostgreSQL Schema
+  const initPgSchema = async () => {
+    try {
+      await pgPool.query(`
+        CREATE TABLE IF NOT EXISTS clients (
+          id SERIAL PRIMARY KEY,
+          client_code VARCHAR(100) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255),
+          phone VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS payments (
+          id SERIAL PRIMARY KEY,
+          tracking_code VARCHAR(100) UNIQUE NOT NULL,
+          client_code VARCHAR(100) NOT NULL,
+          client_name VARCHAR(255) NOT NULL,
+          concept TEXT NOT NULL,
+          amount NUMERIC(12, 2) NOT NULL,
+          currency VARCHAR(10) DEFAULT 'USD',
+          payment_method VARCHAR(100) NOT NULL,
+          reference_number VARCHAR(100) NOT NULL,
+          payment_date VARCHAR(50) NOT NULL,
+          contact_email VARCHAR(255),
+          contact_phone VARCHAR(100),
+          receipt_url TEXT,
+          status VARCHAR(50) DEFAULT 'Pendiente',
+          admin_notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          payment_id INTEGER,
+          client_name VARCHAR(255),
+          type VARCHAR(50) DEFAULT 'EMAIL',
+          title VARCHAR(255) NOT NULL,
+          message TEXT NOT NULL,
+          status VARCHAR(50) DEFAULT 'ENVIADO',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Tablas PostgreSQL inicializadas correctamente.');
+    } catch (err) {
+      console.error('❌ Error inicializando esquema PostgreSQL:', err);
+    }
+  };
+
+  initPgSchema();
+} else {
+  console.log('📁 Usando Base de Datos local persistente (database.json)...');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
 }
 
-// Initial Database Structure with Seed Data
+// Initial Local Seed Data
 const initialData = {
   clients: [
     {
@@ -105,66 +173,9 @@ const initialData = {
       admin_notes: 'Verificación bancaria confirmada.',
       created_at: '2026-10-04 16:45:00',
       updated_at: '2026-10-04 17:10:00'
-    },
-    {
-      id: 4,
-      tracking_code: 'PAY-2026-1004',
-      client_code: 'CLI-004',
-      client_name: 'Inversiones Globales R&M',
-      concept: 'Consultoría de Negocios Q3',
-      amount: 28500.00,
-      currency: 'Bs',
-      payment_method: 'Transferencia Bancaria',
-      reference_number: 'REF-003912',
-      payment_date: '2026-10-03',
-      contact_email: 'admin@inversionesrm.com',
-      contact_phone: '+58 416 5554433',
-      receipt_url: null,
-      status: 'Rechazado',
-      admin_notes: 'Número de referencia no encontrado en los movimientos bancarios.',
-      created_at: '2026-10-03 14:20:00',
-      updated_at: '2026-10-03 15:00:00'
-    },
-    {
-      id: 5,
-      tracking_code: 'PAY-2026-1005',
-      client_code: 'CLI-001',
-      client_name: 'Empresa TechSol C.A.',
-      concept: 'Servidor Dedicado Mensual',
-      amount: 8250.00,
-      currency: 'Bs',
-      payment_method: 'Pago Móvil',
-      reference_number: 'PM-991204',
-      payment_date: '2026-10-06',
-      contact_email: 'contacto@techsol.com',
-      contact_phone: '+58 412 1234567',
-      receipt_url: null,
-      status: 'Pendiente',
-      admin_notes: null,
-      created_at: '2026-10-06 14:00:00',
-      updated_at: '2026-10-06 14:00:00'
     }
   ],
-  notifications: [
-    {
-      id: 1,
-      payment_id: 1,
-      client_name: 'Empresa TechSol C.A.',
-      type: 'EMAIL',
-      title: 'Pago Aprobado: PAY-2026-1001',
-      message: 'El pago PAY-2026-1001 por $450.00 USD ha sido aprobado exitosamente.',
-      created_at: '2026-10-05 11:00:00'
-    },
-    {
-      id: 2,
-      payment_id: 2,
-      client_name: 'Distribuidora San José',
-      type: 'EMAIL',
-      title: 'Nuevo Pago Registrado: PAY-2026-1002',
-      message: 'Se registró reporte de pago por Bs. 45,000.00 (Ref: PM-554192). Estatus: Pendiente.',
-      created_at: '2026-10-06 09:15:00'
-    }
-  ]
+  notifications: []
 };
 
 function loadDB() {
@@ -176,7 +187,6 @@ function loadDB() {
     const raw = fs.readFileSync(dbFilePath, 'utf8');
     return JSON.parse(raw);
   } catch (err) {
-    console.error('Error leyendo base de datos, reiniciando:', err);
     saveDB(initialData);
     return initialData;
   }
@@ -187,73 +197,109 @@ function saveDB(data) {
 }
 
 export const db = {
-  getClients() {
+  async getClients() {
+    if (pgPool) {
+      const res = await pgPool.query(`
+        SELECT c.*, 
+          COUNT(p.id)::int as total_payments,
+          COALESCE(SUM(CASE WHEN p.status = 'Aprobado' AND (p.currency = 'USD' OR p.currency IS NULL) THEN p.amount ELSE 0 END), 0)::float as total_paid_usd,
+          COALESCE(SUM(CASE WHEN p.status = 'Aprobado' AND p.currency = 'Bs' THEN p.amount ELSE 0 END), 0)::float as total_paid_bs,
+          COALESCE(SUM(CASE WHEN p.status = 'Pendiente' AND (p.currency = 'USD' OR p.currency IS NULL) THEN p.amount ELSE 0 END), 0)::float as total_pending_usd,
+          COALESCE(SUM(CASE WHEN p.status = 'Pendiente' AND p.currency = 'Bs' THEN p.amount ELSE 0 END), 0)::float as total_pending_bs
+        FROM clients c
+        LEFT JOIN payments p ON c.client_code = p.client_code
+        GROUP BY c.id
+        ORDER BY c.name ASC
+      `);
+      return res.rows;
+    }
+
     const data = loadDB();
     const payments = data.payments || [];
     return (data.clients || []).map(client => {
       const clientPayments = payments.filter(p => p.client_code === client.client_code);
-      const total_payments = clientPayments.length;
-      
-      const total_paid_usd = clientPayments
-        .filter(p => p.status === 'Aprobado' && (p.currency === 'USD' || !p.currency))
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      const total_paid_bs = clientPayments
-        .filter(p => p.status === 'Aprobado' && p.currency === 'Bs')
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      const total_pending_usd = clientPayments
-        .filter(p => p.status === 'Pendiente' && (p.currency === 'USD' || !p.currency))
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      const total_pending_bs = clientPayments
-        .filter(p => p.status === 'Pendiente' && p.currency === 'Bs')
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-
       return {
         ...client,
-        total_payments,
-        total_paid_usd,
-        total_paid_bs,
-        total_pending_usd,
-        total_pending_bs
+        total_payments: clientPayments.length,
+        total_paid_usd: clientPayments.filter(p => p.status === 'Aprobado' && (p.currency === 'USD' || !p.currency)).reduce((sum, p) => sum + p.amount, 0),
+        total_paid_bs: clientPayments.filter(p => p.status === 'Aprobado' && p.currency === 'Bs').reduce((sum, p) => sum + p.amount, 0),
+        total_pending_usd: clientPayments.filter(p => p.status === 'Pendiente' && (p.currency === 'USD' || !p.currency)).reduce((sum, p) => sum + p.amount, 0),
+        total_pending_bs: clientPayments.filter(p => p.status === 'Pendiente' && p.currency === 'Bs').reduce((sum, p) => sum + p.amount, 0)
       };
     });
   },
 
-  addClient(client) {
-    const data = loadDB();
-    const existing = data.clients.find(c => c.client_code.toUpperCase() === client.client_code.toUpperCase());
-    if (existing) {
-      throw new Error('Ya existe un cliente con ese código.');
+  async addClient(client) {
+    const code = client.client_code.trim().toUpperCase();
+    const name = client.name.trim();
+    const email = client.email || '';
+    const phone = client.phone || '';
+
+    if (pgPool) {
+      const check = await pgPool.query('SELECT * FROM clients WHERE client_code = $1', [code]);
+      if (check.rows.length > 0) throw new Error('Ya existe un cliente con ese código.');
+      
+      const res = await pgPool.query(
+        'INSERT INTO clients (client_code, name, email, phone) VALUES ($1, $2, $3, $4) RETURNING *',
+        [code, name, email, phone]
+      );
+      return res.rows[0];
     }
-    const newClient = {
-      id: Date.now(),
-      client_code: client.client_code.trim().toUpperCase(),
-      name: client.name.trim(),
-      email: client.email || '',
-      phone: client.phone || '',
-      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
-    };
+
+    const data = loadDB();
+    const existing = data.clients.find(c => c.client_code.toUpperCase() === code);
+    if (existing) throw new Error('Ya existe un cliente con ese código.');
+    
+    const newClient = { id: Date.now(), client_code: code, name, email, phone, created_at: new Date().toISOString() };
     data.clients.push(newClient);
     saveDB(data);
     return newClient;
   },
 
-  getPayments(filters = {}) {
+  async getPayments(filters = {}) {
+    const { status, search, startDate, endDate, currency } = filters;
+
+    if (pgPool) {
+      let query = 'SELECT * FROM payments WHERE 1=1';
+      const params = [];
+      let paramIndex = 1;
+
+      if (status && status !== 'Todos') {
+        query += ` AND status = $${paramIndex++}`;
+        params.push(status);
+      }
+
+      if (currency && currency !== 'Todas') {
+        query += ` AND currency = $${paramIndex++}`;
+        params.push(currency);
+      }
+
+      if (search) {
+        query += ` AND (LOWER(client_name) LIKE $${paramIndex} OR LOWER(client_code) LIKE $${paramIndex} OR LOWER(tracking_code) LIKE $${paramIndex} OR LOWER(reference_number) LIKE $${paramIndex} OR LOWER(concept) LIKE $${paramIndex})`;
+        params.push(`%${search.toLowerCase()}%`);
+        paramIndex++;
+      }
+
+      if (startDate) {
+        query += ` AND payment_date >= $${paramIndex++}`;
+        params.push(startDate);
+      }
+
+      if (endDate) {
+        query += ` AND payment_date <= $${paramIndex++}`;
+        params.push(endDate);
+      }
+
+      query += ' ORDER BY id DESC';
+      const res = await pgPool.query(query, params);
+      return res.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }));
+    }
+
     const data = loadDB();
     let list = [...(data.payments || [])];
 
-    const { status, search, startDate, endDate, currency } = filters;
-
-    if (status && status !== 'Todos') {
-      list = list.filter(p => p.status === status);
-    }
-
-    if (currency && currency !== 'Todas') {
-      list = list.filter(p => (p.currency || 'USD') === currency);
-    }
-
+    if (status && status !== 'Todos') list = list.filter(p => p.status === status);
+    if (currency && currency !== 'Todas') list = list.filter(p => (p.currency || 'USD') === currency);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(p =>
@@ -264,32 +310,62 @@ export const db = {
         (p.concept && p.concept.toLowerCase().includes(q))
       );
     }
-
-    if (startDate) {
-      list = list.filter(p => p.payment_date >= startDate);
-    }
-
-    if (endDate) {
-      list = list.filter(p => p.payment_date <= endDate);
-    }
+    if (startDate) list = list.filter(p => p.payment_date >= startDate);
+    if (endDate) list = list.filter(p => p.payment_date <= endDate);
 
     return list.sort((a, b) => b.id - a.id);
   },
 
-  addPayment(paymentData) {
-    const data = loadDB();
+  async addPayment(paymentData) {
     const currency = paymentData.currency || 'USD';
     const currencySymbol = currency === 'Bs' ? 'Bs.' : '$';
 
+    if (pgPool) {
+      // Auto-create client if missing
+      await pgPool.query(
+        `INSERT INTO clients (client_code, name, email, phone) VALUES ($1, $2, $3, $4) ON CONFLICT (client_code) DO NOTHING`,
+        [paymentData.client_code, paymentData.client_name, paymentData.contact_email || '', paymentData.contact_phone || '']
+      );
+
+      const res = await pgPool.query(
+        `INSERT INTO payments (
+          tracking_code, client_code, client_name, concept, amount, currency,
+          payment_method, reference_number, payment_date, contact_email,
+          contact_phone, receipt_url, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Pendiente') RETURNING *`,
+        [
+          paymentData.tracking_code, paymentData.client_code, paymentData.client_name,
+          paymentData.concept, paymentData.amount, currency, paymentData.payment_method,
+          paymentData.reference_number, paymentData.payment_date, paymentData.contact_email,
+          paymentData.contact_phone, paymentData.receipt_url
+        ]
+      );
+
+      const newPayment = { ...res.rows[0], amount: parseFloat(res.rows[0].amount) };
+
+      // Add Notification
+      await pgPool.query(
+        `INSERT INTO notifications (payment_id, client_name, type, title, message) VALUES ($1, $2, 'EMAIL', $3, $4)`,
+        [
+          newPayment.id,
+          newPayment.client_name,
+          `Nuevo Pago Registrado: ${newPayment.tracking_code}`,
+          `Se recibió reporte de pago por ${currencySymbol} ${newPayment.amount} (${currency}) de ${newPayment.client_name} (Ref: ${newPayment.reference_number}). Estado: Pendiente.`
+        ]
+      );
+
+      return newPayment;
+    }
+
+    const data = loadDB();
     const newPayment = {
       id: Date.now(),
       ...paymentData,
       currency,
-      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      updated_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
-    // Auto-create client if not exists
     const existingClient = data.clients.find(c => c.client_code === paymentData.client_code);
     if (!existingClient) {
       data.clients.push({
@@ -298,38 +374,59 @@ export const db = {
         name: paymentData.client_name,
         email: paymentData.contact_email || '',
         phone: paymentData.contact_phone || '',
-        created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+        created_at: new Date().toISOString()
       });
     }
 
     data.payments.push(newPayment);
-
-    // Notification entry
     data.notifications.push({
       id: Date.now() + 2,
       payment_id: newPayment.id,
       client_name: newPayment.client_name,
       type: 'EMAIL',
       title: `Nuevo Pago Registrado: ${newPayment.tracking_code}`,
-      message: `Se recibió reporte de pago por ${currencySymbol} ${newPayment.amount} (${newPayment.currency}) de ${newPayment.client_name} (Ref: ${newPayment.reference_number}). Estado: Pendiente.`,
-      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      message: `Se recibió reporte de pago por ${currencySymbol} ${newPayment.amount} (${currency}) de ${newPayment.client_name} (Ref: ${newPayment.reference_number}). Estado: Pendiente.`,
+      created_at: new Date().toISOString()
     });
 
     saveDB(data);
     return newPayment;
   },
 
-  updatePaymentStatus(id, status, admin_notes) {
+  async updatePaymentStatus(id, status, admin_notes) {
+    if (pgPool) {
+      const res = await pgPool.query(
+        `UPDATE payments SET status = $1, admin_notes = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *`,
+        [status, admin_notes || null, id]
+      );
+      if (res.rows.length === 0) return null;
+      const payment = { ...res.rows[0], amount: parseFloat(res.rows[0].amount) };
+      const currencySymbol = payment.currency === 'Bs' ? 'Bs.' : '$';
+
+      await pgPool.query(
+        `INSERT INTO notifications (payment_id, client_name, type, title, message) VALUES ($1, $2, 'EMAIL', $3, $4)`,
+        [
+          payment.id,
+          payment.client_name,
+          `Pago ${status}: ${payment.tracking_code}`,
+          status === 'Aprobado'
+            ? `El pago ${payment.tracking_code} por ${currencySymbol} ${payment.amount} (${payment.currency || 'USD'}) de ${payment.client_name} ha sido APROBADO.`
+            : `El pago ${payment.tracking_code} por ${currencySymbol} ${payment.amount} (${payment.currency || 'USD'}) de ${payment.client_name} ha sido RECHAZADO. Motivo: ${admin_notes || 'No especificado'}.`
+        ]
+      );
+
+      return payment;
+    }
+
     const data = loadDB();
     const payment = data.payments.find(p => p.id === Number(id));
     if (!payment) return null;
 
     payment.status = status;
     payment.admin_notes = admin_notes || null;
-    payment.updated_at = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    payment.updated_at = new Date().toISOString();
 
-    const currencySymbol = (payment.currency === 'Bs') ? 'Bs.' : '$';
-
+    const currencySymbol = payment.currency === 'Bs' ? 'Bs.' : '$';
     data.notifications.push({
       id: Date.now(),
       payment_id: payment.id,
@@ -339,62 +436,86 @@ export const db = {
       message: status === 'Aprobado'
         ? `El pago ${payment.tracking_code} por ${currencySymbol} ${payment.amount} (${payment.currency || 'USD'}) de ${payment.client_name} ha sido APROBADO.`
         : `El pago ${payment.tracking_code} por ${currencySymbol} ${payment.amount} (${payment.currency || 'USD'}) de ${payment.client_name} ha sido RECHAZADO. Motivo: ${admin_notes || 'No especificado'}.`,
-      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      created_at: new Date().toISOString()
     });
 
     saveDB(data);
     return payment;
   },
 
-  getStats() {
+  async getStats() {
+    if (pgPool) {
+      const approvedUSDRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Aprobado' AND (currency = 'USD' OR currency IS NULL)`);
+      const approvedBsRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Aprobado' AND currency = 'Bs'`);
+
+      const pendingUSDRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Pendiente' AND (currency = 'USD' OR currency IS NULL)`);
+      const pendingBsRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Pendiente' AND currency = 'Bs'`);
+
+      const countPendingRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Pendiente'`);
+      const countApprovedRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Aprobado'`);
+      const countRejectedRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Rechazado'`);
+
+      const methodRes = await pgPool.query(`
+        SELECT payment_method, currency, COUNT(*)::int as count, SUM(amount)::float as total 
+        FROM payments 
+        WHERE status = 'Aprobado' 
+        GROUP BY payment_method, currency
+      `);
+
+      const recentRes = await pgPool.query(`SELECT * FROM payments ORDER BY id DESC LIMIT 5`);
+
+      const methodStats = methodRes.rows.map(r => ({
+        payment_method: `${r.payment_method} (${r.currency || 'USD'})`,
+        count: r.count,
+        total: r.total,
+        currency: r.currency || 'USD'
+      }));
+
+      return {
+        totalApprovedUSD: approvedUSDRes.rows[0].total,
+        totalApprovedBs: approvedBsRes.rows[0].total,
+        totalPendingUSD: pendingUSDRes.rows[0].total,
+        totalPendingBs: pendingBsRes.rows[0].total,
+        countPending: countPendingRes.rows[0].count,
+        countApproved: countApprovedRes.rows[0].count,
+        countRejected: countRejectedRes.rows[0].count,
+        methodStats,
+        recentPayments: recentRes.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }))
+      };
+    }
+
     const data = loadDB();
     const payments = data.payments || [];
+    const approved = payments.filter(p => p.status === 'Aprobado');
+    const pending = payments.filter(p => p.status === 'Pendiente');
+    const rejected = payments.filter(p => p.status === 'Rechazado');
 
-    const approvedPayments = payments.filter(p => p.status === 'Aprobado');
-    const pendingPayments = payments.filter(p => p.status === 'Pendiente');
-    const rejectedPayments = payments.filter(p => p.status === 'Rechazado');
-
-    const totalApprovedUSD = approvedPayments
-      .filter(p => (p.currency || 'USD') === 'USD')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const totalApprovedBs = approvedPayments
-      .filter(p => p.currency === 'Bs')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const totalPendingUSD = pendingPayments
-      .filter(p => (p.currency || 'USD') === 'USD')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const totalPendingBs = pendingPayments
-      .filter(p => p.currency === 'Bs')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    // Method breakdown
     const methodMap = {};
-    approvedPayments.forEach(p => {
+    approved.forEach(p => {
       const key = `${p.payment_method} (${p.currency || 'USD'})`;
-      if (!methodMap[key]) {
-        methodMap[key] = { payment_method: key, count: 0, total: 0, currency: p.currency || 'USD' };
-      }
+      if (!methodMap[key]) methodMap[key] = { payment_method: key, count: 0, total: 0, currency: p.currency || 'USD' };
       methodMap[key].count += 1;
       methodMap[key].total += p.amount;
     });
 
     return {
-      totalApprovedUSD,
-      totalApprovedBs,
-      totalPendingUSD,
-      totalPendingBs,
-      countPending: pendingPayments.length,
-      countApproved: approvedPayments.length,
-      countRejected: rejectedPayments.length,
+      totalApprovedUSD: approved.filter(p => (p.currency || 'USD') === 'USD').reduce((sum, p) => sum + p.amount, 0),
+      totalApprovedBs: approved.filter(p => p.currency === 'Bs').reduce((sum, p) => sum + p.amount, 0),
+      totalPendingUSD: pending.filter(p => (p.currency || 'USD') === 'USD').reduce((sum, p) => sum + p.amount, 0),
+      totalPendingBs: pending.filter(p => p.currency === 'Bs').reduce((sum, p) => sum + p.amount, 0),
+      countPending: pending.length,
+      countApproved: approved.length,
+      countRejected: rejected.length,
       methodStats: Object.values(methodMap),
       recentPayments: [...payments].sort((a, b) => b.id - a.id).slice(0, 5)
     };
   },
 
-  getNotifications() {
+  async getNotifications() {
+    if (pgPool) {
+      const res = await pgPool.query('SELECT * FROM notifications ORDER BY id DESC LIMIT 20');
+      return res.rows;
+    }
     const data = loadDB();
     return (data.notifications || []).sort((a, b) => b.id - a.id).slice(0, 20);
   }
