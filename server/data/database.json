@@ -1,0 +1,198 @@
+{
+  "clients": [
+    {
+      "id": 1,
+      "client_code": "CLI-001",
+      "name": "Empresa TechSol C.A.",
+      "email": "contacto@techsol.com",
+      "phone": "+58 412 1234567",
+      "created_at": "2026-09-15 08:00:00"
+    },
+    {
+      "id": 2,
+      "client_code": "CLI-002",
+      "name": "Distribuidora San José",
+      "email": "ventas@sanjose.com",
+      "phone": "+58 414 7654321",
+      "created_at": "2026-09-20 10:30:00"
+    },
+    {
+      "id": 3,
+      "client_code": "CLI-003",
+      "name": "Carlos Eduardo Mendoza",
+      "email": "carlos.mendoza@gmail.com",
+      "phone": "+58 424 9876543",
+      "created_at": "2026-09-25 14:15:00"
+    },
+    {
+      "id": 4,
+      "client_code": "CLI-004",
+      "name": "Inversiones Globales R&M",
+      "email": "admin@inversionesrm.com",
+      "phone": "+58 416 5554433",
+      "created_at": "2026-10-01 11:00:00"
+    },
+    {
+      "id": 1791330589748,
+      "client_code": "J-085125205",
+      "name": "MAQUINARIAS EL IMAN",
+      "email": "administracion@maquinariaseliman.com",
+      "phone": "02517101000",
+      "created_at": "2026-10-06 23:49:49"
+    }
+  ],
+  "payments": [
+    {
+      "id": 1,
+      "tracking_code": "PAY-2026-1001",
+      "client_code": "CLI-001",
+      "client_name": "Empresa TechSol C.A.",
+      "concept": "Servicio de Mantenimiento Web - Octubre",
+      "amount": 450,
+      "currency": "USD",
+      "payment_method": "Transferencia Bancaria",
+      "reference_number": "REF-984210",
+      "payment_date": "2026-10-05",
+      "contact_email": "contacto@techsol.com",
+      "contact_phone": "+58 412 1234567",
+      "receipt_url": null,
+      "status": "Aprobado",
+      "admin_notes": "Pago verificado exitosamente en la cuenta bancaria principal.",
+      "created_at": "2026-10-05 10:30:00",
+      "updated_at": "2026-10-05 11:00:00"
+    },
+    {
+      "id": 2,
+      "tracking_code": "PAY-2026-1002",
+      "client_code": "CLI-002",
+      "client_name": "Distribuidora San José",
+      "concept": "Factura Nro #1042 - Licencias de Software",
+      "amount": 1200,
+      "currency": "USD",
+      "payment_method": "Zelle",
+      "reference_number": "ZEL-554192",
+      "payment_date": "2026-10-06",
+      "contact_email": "ventas@sanjose.com",
+      "contact_phone": "+58 414 7654321",
+      "receipt_url": null,
+      "status": "Pendiente",
+      "admin_notes": null,
+      "created_at": "2026-10-06 09:15:00",
+      "updated_at": "2026-10-06 09:15:00"
+    },
+    {
+      "id": 3,
+      "tracking_code": "PAY-2026-1003",
+      "client_code": "CLI-003",
+      "client_name": "Carlos Eduardo Mendoza",
+      "concept": "Suscripción Mensual VIP",
+      "amount": 85,
+      "currency": "USD",
+      "payment_method": "Pago Móvil",
+      "reference_number": "PM-883019",
+      "payment_date": "2026-10-04",
+      "contact_email": "carlos.mendoza@gmail.com",
+      "contact_phone": "+58 424 9876543",
+      "receipt_url": null,
+      "status": "Aprobado",
+      "admin_notes": "Verificación bancaria confirmada.",
+      "created_at": "2026-10-04 16:45:00",
+      "updated_at": "2026-10-04 17:10:00"
+    },
+    {
+      "id": 4,
+      "tracking_code": "PAY-2026-1004",
+      "client_code": "CLI-004",
+      "client_name": "Inversiones Globales R&M",
+      "concept": "Consultoría de Negocios Q3",
+      "amount": 750,
+      "currency": "USD",
+      "payment_method": "Transferencia Bancaria",
+      "reference_number": "REF-003912",
+      "payment_date": "2026-10-03",
+      "contact_email": "admin@inversionesrm.com",
+      "contact_phone": "+58 416 5554433",
+      "receipt_url": null,
+      "status": "Rechazado",
+      "admin_notes": "Número de referencia no encontrado en los movimientos bancarios.",
+      "created_at": "2026-10-03 14:20:00",
+      "updated_at": "2026-10-03 15:00:00"
+    },
+    {
+      "id": 5,
+      "tracking_code": "PAY-2026-1005",
+      "client_code": "CLI-001",
+      "client_name": "Empresa TechSol C.A.",
+      "concept": "Servidor Dedicado Mensual",
+      "amount": 220,
+      "currency": "USD",
+      "payment_method": "Pago Móvil",
+      "reference_number": "PM-991204",
+      "payment_date": "2026-10-06",
+      "contact_email": "contacto@techsol.com",
+      "contact_phone": "+58 412 1234567",
+      "receipt_url": null,
+      "status": "Pendiente",
+      "admin_notes": null,
+      "created_at": "2026-10-06 14:00:00",
+      "updated_at": "2026-10-06 14:00:00"
+    },
+    {
+      "id": 1791330589747,
+      "tracking_code": "PAY-2026-8788",
+      "client_code": "J-085125205",
+      "client_name": "MAQUINARIAS EL IMAN",
+      "concept": "FACTURA 1000",
+      "amount": 250,
+      "currency": "USD",
+      "payment_method": "Zelle",
+      "reference_number": "1234567890",
+      "payment_date": "2026-10-06",
+      "contact_email": "administracion@maquinariaseliman.com",
+      "contact_phone": "02517101000",
+      "receipt_url": null,
+      "status": "Aprobado",
+      "admin_notes": null,
+      "created_at": "2026-10-06 23:49:49",
+      "updated_at": "2026-10-06 23:50:10"
+    }
+  ],
+  "notifications": [
+    {
+      "id": 1,
+      "payment_id": 1,
+      "client_name": "Empresa TechSol C.A.",
+      "type": "EMAIL",
+      "title": "Pago Aprobado: PAY-2026-1001",
+      "message": "El pago PAY-2026-1001 por $450.00 ha sido aprobado exitosamente.",
+      "created_at": "2026-10-05 11:00:00"
+    },
+    {
+      "id": 2,
+      "payment_id": 2,
+      "client_name": "Distribuidora San José",
+      "type": "EMAIL",
+      "title": "Nuevo Pago Registrado: PAY-2026-1002",
+      "message": "Se registró reporte de pago por $1,200.00 (Ref: ZEL-554192). Estatus: Pendiente.",
+      "created_at": "2026-10-06 09:15:00"
+    },
+    {
+      "id": 1791330589749,
+      "payment_id": 1791330589747,
+      "client_name": "MAQUINARIAS EL IMAN",
+      "type": "EMAIL",
+      "title": "Nuevo Pago Registrado: PAY-2026-8788",
+      "message": "Se recibió reporte de pago por $250 de MAQUINARIAS EL IMAN (Ref: 1234567890). Estado: Pendiente.",
+      "created_at": "2026-10-06 23:49:49"
+    },
+    {
+      "id": 1791330610627,
+      "payment_id": 1791330589747,
+      "client_name": "MAQUINARIAS EL IMAN",
+      "type": "EMAIL",
+      "title": "Pago Aprobado: PAY-2026-8788",
+      "message": "El pago PAY-2026-8788 por $250 de MAQUINARIAS EL IMAN ha sido APROBADO.",
+      "created_at": "2026-10-06 23:50:10"
+    }
+  ]
+}

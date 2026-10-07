@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  control-pagos:
+    build: .
+    container_name: control-pagos-app
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      - ./server/data:/app/server/data
+      - ./server/uploads:/app/server/uploads
