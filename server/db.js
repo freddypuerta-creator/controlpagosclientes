@@ -10,7 +10,6 @@ const __dirname = path.dirname(__filename);
 const dataDir = path.join(__dirname, 'data');
 const dbFilePath = path.join(dataDir, 'database.json');
 
-// Check if PostgreSQL DATABASE_URL is set in environment
 const DATABASE_URL = process.env.DATABASE_URL;
 
 let pgPool = null;
@@ -19,10 +18,11 @@ if (DATABASE_URL) {
   console.log('⚡ Conectando a Base de Datos PostgreSQL Externa (Nube)...');
   pgPool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // Required for cloud providers like Supabase, Render, Neon
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000
   });
 
-  // Auto-create PostgreSQL Schema
   const initPgSchema = async () => {
     try {
       await pgPool.query(`
@@ -68,7 +68,7 @@ if (DATABASE_URL) {
       `);
       console.log('✅ Tablas PostgreSQL inicializadas correctamente.');
     } catch (err) {
-      console.error('❌ Error inicializando esquema PostgreSQL:', err);
+      console.error('❌ Error inicializando esquema PostgreSQL:', err.message);
     }
   };
 
@@ -80,7 +80,6 @@ if (DATABASE_URL) {
   }
 }
 
-// Initial Local Seed Data
 const initialData = {
   clients: [
     {
@@ -98,22 +97,6 @@ const initialData = {
       email: 'ventas@sanjose.com',
       phone: '+58 414 7654321',
       created_at: '2026-09-20 10:30:00'
-    },
-    {
-      id: 3,
-      client_code: 'CLI-003',
-      name: 'Carlos Eduardo Mendoza',
-      email: 'carlos.mendoza@gmail.com',
-      phone: '+58 424 9876543',
-      created_at: '2026-09-25 14:15:00'
-    },
-    {
-      id: 4,
-      client_code: 'CLI-004',
-      name: 'Inversiones Globales R&M',
-      email: 'admin@inversionesrm.com',
-      phone: '+58 416 5554433',
-      created_at: '2026-10-01 11:00:00'
     }
   ],
   payments: [
@@ -132,47 +115,9 @@ const initialData = {
       contact_phone: '+58 412 1234567',
       receipt_url: null,
       status: 'Aprobado',
-      admin_notes: 'Pago verificado exitosamente en la cuenta bancaria principal.',
+      admin_notes: 'Pago verificado exitosamente.',
       created_at: '2026-10-05 10:30:00',
       updated_at: '2026-10-05 11:00:00'
-    },
-    {
-      id: 2,
-      tracking_code: 'PAY-2026-1002',
-      client_code: 'CLI-002',
-      client_name: 'Distribuidora San José',
-      concept: 'Factura Nro #1042 - Licencias de Software',
-      amount: 45000.00,
-      currency: 'Bs',
-      payment_method: 'Pago Móvil',
-      reference_number: 'PM-554192',
-      payment_date: '2026-10-06',
-      contact_email: 'ventas@sanjose.com',
-      contact_phone: '+58 414 7654321',
-      receipt_url: null,
-      status: 'Pendiente',
-      admin_notes: null,
-      created_at: '2026-10-06 09:15:00',
-      updated_at: '2026-10-06 09:15:00'
-    },
-    {
-      id: 3,
-      tracking_code: 'PAY-2026-1003',
-      client_code: 'CLI-003',
-      client_name: 'Carlos Eduardo Mendoza',
-      concept: 'Suscripción Mensual VIP',
-      amount: 85.00,
-      currency: 'USD',
-      payment_method: 'Zelle',
-      reference_number: 'ZEL-883019',
-      payment_date: '2026-10-04',
-      contact_email: 'carlos.mendoza@gmail.com',
-      contact_phone: '+58 424 9876543',
-      receipt_url: null,
-      status: 'Aprobado',
-      admin_notes: 'Verificación bancaria confirmada.',
-      created_at: '2026-10-04 16:45:00',
-      updated_at: '2026-10-04 17:10:00'
     }
   ],
   notifications: []
@@ -199,19 +144,24 @@ function saveDB(data) {
 export const db = {
   async getClients() {
     if (pgPool) {
-      const res = await pgPool.query(`
-        SELECT c.*, 
-          COUNT(p.id)::int as total_payments,
-          COALESCE(SUM(CASE WHEN p.status = 'Aprobado' AND (p.currency = 'USD' OR p.currency IS NULL) THEN p.amount ELSE 0 END), 0)::float as total_paid_usd,
-          COALESCE(SUM(CASE WHEN p.status = 'Aprobado' AND p.currency = 'Bs' THEN p.amount ELSE 0 END), 0)::float as total_paid_bs,
-          COALESCE(SUM(CASE WHEN p.status = 'Pendiente' AND (p.currency = 'USD' OR p.currency IS NULL) THEN p.amount ELSE 0 END), 0)::float as total_pending_usd,
-          COALESCE(SUM(CASE WHEN p.status = 'Pendiente' AND p.currency = 'Bs' THEN p.amount ELSE 0 END), 0)::float as total_pending_bs
-        FROM clients c
-        LEFT JOIN payments p ON c.client_code = p.client_code
-        GROUP BY c.id
-        ORDER BY c.name ASC
-      `);
-      return res.rows;
+      try {
+        const res = await pgPool.query(`
+          SELECT c.*, 
+            COUNT(p.id)::int as total_payments,
+            COALESCE(SUM(CASE WHEN p.status = 'Aprobado' AND (p.currency = 'USD' OR p.currency IS NULL) THEN p.amount ELSE 0 END), 0)::float as total_paid_usd,
+            COALESCE(SUM(CASE WHEN p.status = 'Aprobado' AND p.currency = 'Bs' THEN p.amount ELSE 0 END), 0)::float as total_paid_bs,
+            COALESCE(SUM(CASE WHEN p.status = 'Pendiente' AND (p.currency = 'USD' OR p.currency IS NULL) THEN p.amount ELSE 0 END), 0)::float as total_pending_usd,
+            COALESCE(SUM(CASE WHEN p.status = 'Pendiente' AND p.currency = 'Bs' THEN p.amount ELSE 0 END), 0)::float as total_pending_bs
+          FROM clients c
+          LEFT JOIN payments p ON c.client_code = p.client_code
+          GROUP BY c.id
+          ORDER BY c.name ASC
+        `);
+        return res.rows;
+      } catch (err) {
+        console.error('Error DB getClients:', err.message);
+        return [];
+      }
     }
 
     const data = loadDB();
@@ -260,39 +210,44 @@ export const db = {
     const { status, search, startDate, endDate, currency } = filters;
 
     if (pgPool) {
-      let query = 'SELECT * FROM payments WHERE 1=1';
-      const params = [];
-      let paramIndex = 1;
+      try {
+        let query = 'SELECT * FROM payments WHERE 1=1';
+        const params = [];
+        let paramIndex = 1;
 
-      if (status && status !== 'Todos') {
-        query += ` AND status = $${paramIndex++}`;
-        params.push(status);
+        if (status && status !== 'Todos') {
+          query += ` AND status = $${paramIndex++}`;
+          params.push(status);
+        }
+
+        if (currency && currency !== 'Todas') {
+          query += ` AND currency = $${paramIndex++}`;
+          params.push(currency);
+        }
+
+        if (search) {
+          query += ` AND (LOWER(client_name) LIKE $${paramIndex} OR LOWER(client_code) LIKE $${paramIndex} OR LOWER(tracking_code) LIKE $${paramIndex} OR LOWER(reference_number) LIKE $${paramIndex} OR LOWER(concept) LIKE $${paramIndex})`;
+          params.push(`%${search.toLowerCase()}%`);
+          paramIndex++;
+        }
+
+        if (startDate) {
+          query += ` AND payment_date >= $${paramIndex++}`;
+          params.push(startDate);
+        }
+
+        if (endDate) {
+          query += ` AND payment_date <= $${paramIndex++}`;
+          params.push(endDate);
+        }
+
+        query += ' ORDER BY id DESC';
+        const res = await pgPool.query(query, params);
+        return res.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }));
+      } catch (err) {
+        console.error('Error DB getPayments:', err.message);
+        return [];
       }
-
-      if (currency && currency !== 'Todas') {
-        query += ` AND currency = $${paramIndex++}`;
-        params.push(currency);
-      }
-
-      if (search) {
-        query += ` AND (LOWER(client_name) LIKE $${paramIndex} OR LOWER(client_code) LIKE $${paramIndex} OR LOWER(tracking_code) LIKE $${paramIndex} OR LOWER(reference_number) LIKE $${paramIndex} OR LOWER(concept) LIKE $${paramIndex})`;
-        params.push(`%${search.toLowerCase()}%`);
-        paramIndex++;
-      }
-
-      if (startDate) {
-        query += ` AND payment_date >= $${paramIndex++}`;
-        params.push(startDate);
-      }
-
-      if (endDate) {
-        query += ` AND payment_date <= $${paramIndex++}`;
-        params.push(endDate);
-      }
-
-      query += ' ORDER BY id DESC';
-      const res = await pgPool.query(query, params);
-      return res.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }));
     }
 
     const data = loadDB();
@@ -321,7 +276,6 @@ export const db = {
     const currencySymbol = currency === 'Bs' ? 'Bs.' : '$';
 
     if (pgPool) {
-      // Auto-create client if missing
       await pgPool.query(
         `INSERT INTO clients (client_code, name, email, phone) VALUES ($1, $2, $3, $4) ON CONFLICT (client_code) DO NOTHING`,
         [paymentData.client_code, paymentData.client_name, paymentData.contact_email || '', paymentData.contact_phone || '']
@@ -343,7 +297,6 @@ export const db = {
 
       const newPayment = { ...res.rows[0], amount: parseFloat(res.rows[0].amount) };
 
-      // Add Notification
       await pgPool.query(
         `INSERT INTO notifications (payment_id, client_name, type, title, message) VALUES ($1, $2, 'EMAIL', $3, $4)`,
         [
@@ -445,43 +398,51 @@ export const db = {
 
   async getStats() {
     if (pgPool) {
-      const approvedUSDRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Aprobado' AND (currency = 'USD' OR currency IS NULL)`);
-      const approvedBsRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Aprobado' AND currency = 'Bs'`);
+      try {
+        const approvedUSDRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Aprobado' AND (currency = 'USD' OR currency IS NULL)`);
+        const approvedBsRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Aprobado' AND currency = 'Bs'`);
 
-      const pendingUSDRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Pendiente' AND (currency = 'USD' OR currency IS NULL)`);
-      const pendingBsRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Pendiente' AND currency = 'Bs'`);
+        const pendingUSDRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Pendiente' AND (currency = 'USD' OR currency IS NULL)`);
+        const pendingBsRes = await pgPool.query(`SELECT COALESCE(SUM(amount), 0)::float as total FROM payments WHERE status = 'Pendiente' AND currency = 'Bs'`);
 
-      const countPendingRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Pendiente'`);
-      const countApprovedRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Aprobado'`);
-      const countRejectedRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Rechazado'`);
+        const countPendingRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Pendiente'`);
+        const countApprovedRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Aprobado'`);
+        const countRejectedRes = await pgPool.query(`SELECT COUNT(*)::int as count FROM payments WHERE status = 'Rechazado'`);
 
-      const methodRes = await pgPool.query(`
-        SELECT payment_method, currency, COUNT(*)::int as count, SUM(amount)::float as total 
-        FROM payments 
-        WHERE status = 'Aprobado' 
-        GROUP BY payment_method, currency
-      `);
+        const methodRes = await pgPool.query(`
+          SELECT payment_method, currency, COUNT(*)::int as count, SUM(amount)::float as total 
+          FROM payments 
+          WHERE status = 'Aprobado' 
+          GROUP BY payment_method, currency
+        `);
 
-      const recentRes = await pgPool.query(`SELECT * FROM payments ORDER BY id DESC LIMIT 5`);
+        const recentRes = await pgPool.query(`SELECT * FROM payments ORDER BY id DESC LIMIT 5`);
 
-      const methodStats = methodRes.rows.map(r => ({
-        payment_method: `${r.payment_method} (${r.currency || 'USD'})`,
-        count: r.count,
-        total: r.total,
-        currency: r.currency || 'USD'
-      }));
+        const methodStats = methodRes.rows.map(r => ({
+          payment_method: `${r.payment_method} (${r.currency || 'USD'})`,
+          count: r.count,
+          total: r.total,
+          currency: r.currency || 'USD'
+        }));
 
-      return {
-        totalApprovedUSD: approvedUSDRes.rows[0].total,
-        totalApprovedBs: approvedBsRes.rows[0].total,
-        totalPendingUSD: pendingUSDRes.rows[0].total,
-        totalPendingBs: pendingBsRes.rows[0].total,
-        countPending: countPendingRes.rows[0].count,
-        countApproved: countApprovedRes.rows[0].count,
-        countRejected: countRejectedRes.rows[0].count,
-        methodStats,
-        recentPayments: recentRes.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }))
-      };
+        return {
+          totalApprovedUSD: approvedUSDRes.rows[0]?.total || 0,
+          totalApprovedBs: approvedBsRes.rows[0]?.total || 0,
+          totalPendingUSD: pendingUSDRes.rows[0]?.total || 0,
+          totalPendingBs: pendingBsRes.rows[0]?.total || 0,
+          countPending: countPendingRes.rows[0]?.count || 0,
+          countApproved: countApprovedRes.rows[0]?.count || 0,
+          countRejected: countRejectedRes.rows[0]?.count || 0,
+          methodStats,
+          recentPayments: recentRes.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }))
+        };
+      } catch (err) {
+        console.error('Error DB getStats:', err.message);
+        return {
+          totalApprovedUSD: 0, totalApprovedBs: 0, totalPendingUSD: 0, totalPendingBs: 0,
+          countPending: 0, countApproved: 0, countRejected: 0, methodStats: [], recentPayments: []
+        };
+      }
     }
 
     const data = loadDB();
@@ -513,8 +474,13 @@ export const db = {
 
   async getNotifications() {
     if (pgPool) {
-      const res = await pgPool.query('SELECT * FROM notifications ORDER BY id DESC LIMIT 20');
-      return res.rows;
+      try {
+        const res = await pgPool.query('SELECT * FROM notifications ORDER BY id DESC LIMIT 20');
+        return res.rows;
+      } catch (err) {
+        console.error('Error DB getNotifications:', err.message);
+        return [];
+      }
     }
     const data = loadDB();
     return (data.notifications || []).sort((a, b) => b.id - a.id).slice(0, 20);

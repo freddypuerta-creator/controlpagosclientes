@@ -242,7 +242,7 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`==================================================`);
   console.log(` Servidor Backend corriendo en puerto ${PORT}`);
   console.log(` API Endpoint: http://localhost:${PORT}/api/health`);
